@@ -53,6 +53,13 @@ We use **Husky** and **lint-staged** to ensure code quality before every commit.
 - **Formatting**: Runs `rustfmt` on staged files to ensure consistent style.
 - **Linting**: `cargo clippy` is configured to enforce a **20-line limit** per function (`too-many-lines-threshold`).
 
+## 📦 Release Process
+
+Releases are automated via GitHub Actions:
+1.  Update the version in `package.json` and `src-tauri/app/tauri.conf.json`.
+2.  Create and push a tag: `git tag v1.0.0 && git push origin v1.0.0`.
+3.  The CI will build the application for all platforms and create a **Draft Release** on GitHub.
+
 ## 🛠️ Development Process
 
 1. Clone the repository and create your branch from `develop`.
