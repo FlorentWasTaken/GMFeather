@@ -19,6 +19,7 @@ export default [
       "vue/multi-word-component-names": "off",
       "no-unused-vars": "warn",
       "no-console": "warn",
+      "max-lines-per-function": ["error", { "max": 20, "skipBlankLines": true, "skipComments": true }],
     },
   },
   {

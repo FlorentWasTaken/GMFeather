@@ -14,7 +14,8 @@
 -   **Multi-Interface Support**: Access the optimizer via a modern, intuitive GUI or a powerful CLI for automation.
 -   **Smart Compression**: Optimized handling of `VTF` (textures), `WAV/MP3` (audio), and other common GMod asset formats.
 -   **Safe Processing**: Built-in validation to ensure that compressed assets remain fully functional in-game.
--   **Clean Architecture**: Engineered using Hexagonal Architecture principles for maximum reliability and maintainability.
+-   **Clean Architecture**: Engineered using Hexagonal Architecture principles with strict SRP enforcement (max 20 lines per function).
+-   **Quality Control**: Automated pre-commit hooks (Husky, lint-staged) and CI/CD pipelines to ensure code integrity.
 
 ## 🏗️ Architecture
 

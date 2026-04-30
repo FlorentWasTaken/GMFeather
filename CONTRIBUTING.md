@@ -41,6 +41,18 @@ We follow the [Conventional Commits](https://www.conventionalcommits.org/) speci
 - `test`: Adding missing tests or correcting existing tests
 - `chore`: Changes to the build process or auxiliary tools and libraries
 
+## ⚓ Pre-commit Hooks
+
+We use **Husky** and **lint-staged** to ensure code quality before every commit. The following checks are automated:
+
+### Frontend (JS/Vue)
+- **Linting**: Runs `eslint --fix` on staged files.
+- **SRP Check**: ESLint will block commits if a function exceeds **20 lines** (`max-lines-per-function`).
+
+### Backend (Rust)
+- **Formatting**: Runs `rustfmt` on staged files to ensure consistent style.
+- **Linting**: `cargo clippy` is configured to enforce a **20-line limit** per function (`too-many-lines-threshold`).
+
 ## 🛠️ Development Process
 
 1. Clone the repository and create your branch from `develop`.

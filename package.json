@@ -10,7 +10,8 @@
     "tauri": "cd src-tauri/app && tauri",
     "lint": "eslint .",
     "test": "npm run test:rust",
-    "test:rust": "cd src-tauri && cargo test --workspace"
+    "test:rust": "cd src-tauri && cargo test --workspace",
+    "prepare": "husky"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
@@ -23,6 +24,12 @@
     "@vitejs/plugin-vue": "^5.2.1",
     "eslint": "^10.2.1",
     "eslint-plugin-vue": "^10.9.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "vite": "^6.0.3"
+  },
+  "lint-staged": {
+    "*.{js,vue}": "eslint --fix",
+    "*.rs": "rustfmt --edition 2021"
   }
 }
