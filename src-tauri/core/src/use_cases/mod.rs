@@ -8,6 +8,9 @@ mod tests {
 
     #[test]
     fn test_greet_user() {
-        assert_eq!(greet_user("Rémy"), "Hello, Rémy! You've been greeted from the Core!");
+        assert_eq!(
+            greet_user("Test"),
+            "Hello, Test! You've been greeted from the Core!"
+        );
     }
 }
