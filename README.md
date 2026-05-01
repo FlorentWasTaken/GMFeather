@@ -35,7 +35,20 @@ Ensure you have the following installed on your system:
 -   **Node.js**: `v24.11.1` or higher
 -   **Package Manager**: `npm` (included with Node.js)
 
-### Installation
+### 🌍 Environment Configuration
+
+Copy the example environment file and adjust the values as needed:
+
+```bash
+cp .env.example .env
+```
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `RUST_LOG` | `info` | Logging level (debug, info, warn, error) |
+| `APP_ENV` | `development` | Application environment (development, production) |
+
+### 📦 Installation
 
 1.  Clone the repository:
     ```bash
