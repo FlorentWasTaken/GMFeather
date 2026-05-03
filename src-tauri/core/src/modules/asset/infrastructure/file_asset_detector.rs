@@ -10,7 +10,15 @@ impl FileAssetDetector {
     pub const fn new() -> Self {
         Self
     }
+}
 
+impl Default for FileAssetDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl FileAssetDetector {
     fn check_magic_bytes(&self, path: &Path) -> Result<AssetType, AssetError> {
         let mut file = File::open(path).map_err(AssetError::IoError)?;
         let mut buffer = [0u8; 12];
