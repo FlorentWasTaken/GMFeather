@@ -9,7 +9,7 @@ use image::{load_from_memory, GenericImageView, ImageFormat};
 use std::fs;
 use std::io::Cursor;
 use std::path::Path;
-use tracing::info;
+use tracing::{info, warn};
 
 pub struct OptimizeImageUseCase<'a> {
     detector: &'a dyn AssetDetector,
@@ -47,6 +47,7 @@ impl<'a> OptimizeImageUseCase<'a> {
         let optimized_data = self.optimize_data(&original_data, options, asset_type, compressor)?;
 
         if optimized_data.len() as u64 >= original_size {
+            info!(path = ?path, "Optimization skipped: no size reduction");
             return Err(OptimizationError::OptimizationIneffective);
         }
 
@@ -92,17 +93,17 @@ impl<'a> OptimizeImageUseCase<'a> {
         fs::write(path, &data)?;
 
         let result = OptimizationResult::new(path.to_path_buf(), original_size, optimized_size);
-        self.log_optimization(path, &result);
+        self.log_success(path, &result);
         Ok(result)
     }
 
-    fn log_optimization(&self, path: &Path, result: &OptimizationResult) {
+    fn log_success(&self, path: &Path, result: &OptimizationResult) {
         info!(
-            "Optimized {}: {} bytes -> {} bytes ({:.2}% reduction)",
-            path.display(),
-            result.original_size,
-            result.optimized_size,
-            result.compression_ratio()
+            path = ?path,
+            original = result.original_size,
+            optimized = result.optimized_size,
+            ratio = %format!("{:.2}%", result.compression_ratio()),
+            "Image optimized successfully"
         );
     }
 
@@ -138,12 +139,12 @@ impl<'a> OptimizeImageUseCase<'a> {
         asset_type: AssetType,
     ) -> Result<Vec<u8>, OptimizationError> {
         let (w, h) = img.dimensions();
-        let resized = img.resize(
-            options.max_width.unwrap_or(w),
-            options.max_height.unwrap_or(h),
-            image::imageops::FilterType::Lanczos3,
-        );
+        let target_w = options.max_width.unwrap_or(w);
+        let target_h = options.max_height.unwrap_or(h);
 
+        info!(from = %format!("{}x{}", w, h), to = %format!("{}x{}", target_w, target_h), "Resizing image");
+
+        let resized = img.resize(target_w, target_h, image::imageops::FilterType::Lanczos3);
         let mut output = Vec::new();
         let format = self.get_format(asset_type)?;
 

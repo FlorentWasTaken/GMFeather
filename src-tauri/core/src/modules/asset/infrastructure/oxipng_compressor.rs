@@ -1,6 +1,7 @@
 use crate::modules::asset::domain::image_compressor::ImageCompressor;
 use crate::modules::asset::domain::optimization_error::OptimizationError;
 use oxipng::{optimize_from_memory, Options};
+use tracing::{debug, error};
 
 pub struct OxipngCompressor;
 
@@ -18,8 +19,11 @@ impl OxipngCompressor {
 
 impl ImageCompressor for OxipngCompressor {
     fn compress(&self, input: &[u8]) -> Result<Vec<u8>, OptimizationError> {
-        let options = Options::default();
-        optimize_from_memory(input, &options)
-            .map_err(|e| OptimizationError::CompressionError(e.to_string()))
+        debug!(input_size = input.len(), "Starting oxipng compression");
+
+        optimize_from_memory(input, &Options::default()).map_err(|e| {
+            error!(error = %e, "Oxipng compression failed");
+            OptimizationError::CompressionError(e.to_string())
+        })
     }
 }
