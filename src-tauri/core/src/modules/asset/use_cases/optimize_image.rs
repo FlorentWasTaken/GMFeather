@@ -9,7 +9,7 @@ use image::{load_from_memory, GenericImageView, ImageFormat};
 use std::fs;
 use std::io::Cursor;
 use std::path::Path;
-use tracing::{info, warn};
+use tracing::info;
 
 pub struct OptimizeImageUseCase<'a> {
     detector: &'a dyn AssetDetector,
