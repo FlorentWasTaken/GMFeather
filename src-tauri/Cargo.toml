@@ -14,3 +14,6 @@ tauri-plugin-opener = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dotenvy = "0.15"
+image = "0.25"
+oxipng = "9.1"
+thiserror = "1.0"
