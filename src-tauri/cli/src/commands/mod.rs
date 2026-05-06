@@ -9,8 +9,13 @@ use rollback::RollbackArgs;
 
 #[derive(Subcommand)]
 pub enum Commands {
+    #[command(about = "Optimize assets (images, textures) to reduce size and VRAM usage")]
     Optimize(OptimizeArgs),
+
+    #[command(about = "Restore original assets from AppData backups")]
     Rollback(RollbackArgs),
+
+    #[command(about = "Delete backups for a specific path to free up space")]
     Clean(CleanArgs),
 }
 

@@ -12,21 +12,28 @@ use walkdir::WalkDir;
 
 #[derive(Args)]
 pub struct OptimizeArgs {
+    #[arg(help = "Path to the directory or file to optimize")]
     pub path: String,
 
-    #[arg(long)]
+    #[arg(long, help = "Simulate the process without modifying any files")]
     pub dry_run: bool,
 
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Maximum width for resized images (maintains aspect ratio)"
+    )]
     pub max_width: Option<u32>,
 
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Maximum height for resized images (maintains aspect ratio)"
+    )]
     pub max_height: Option<u32>,
 
-    #[arg(long)]
+    #[arg(long, help = "Maximum recursion depth for directory scanning")]
     pub max_depth: Option<usize>,
 
-    #[arg(long)]
+    #[arg(long, help = "Skip creating .bak files (not recommended)")]
     pub no_backup: bool,
 }
 

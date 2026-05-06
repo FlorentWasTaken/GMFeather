@@ -6,6 +6,7 @@ use tracing::{error, info};
 
 #[derive(Args)]
 pub struct CleanArgs {
+    #[arg(help = "Path to the directory or file whose backups should be removed")]
     pub path: String,
 }
 

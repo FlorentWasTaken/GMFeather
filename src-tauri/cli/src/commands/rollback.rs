@@ -7,9 +7,10 @@ use walkdir::WalkDir;
 
 #[derive(Args)]
 pub struct RollbackArgs {
+    #[arg(help = "Path to the directory or file to restore")]
     pub path: String,
 
-    #[arg(long)]
+    #[arg(long, help = "Maximum recursion depth for directory scanning")]
     pub max_depth: Option<usize>,
 }
 
