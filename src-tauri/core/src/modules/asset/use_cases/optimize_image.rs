@@ -100,11 +100,25 @@ impl<'a> OptimizeImageUseCase<'a> {
     fn log_success(&self, path: &Path, result: &OptimizationResult) {
         info!(
             path = ?path,
-            original = result.original_size,
-            optimized = result.optimized_size,
+            original = %self.format_size(result.original_size),
+            optimized = %self.format_size(result.optimized_size),
             ratio = %format!("{:.2}%", result.compression_ratio()),
             "Image optimized successfully"
         );
+    }
+
+    fn format_size(&self, bytes: u64) -> String {
+        const KB: f64 = 1024.0;
+        const MB: f64 = KB * 1024.0;
+
+        let bytes_f = bytes as f64;
+        if bytes_f >= MB {
+            format!("{:.2} MB", bytes_f / MB)
+        } else if bytes_f >= KB {
+            format!("{:.2} KB", bytes_f / KB)
+        } else {
+            format!("{} B", bytes)
+        }
     }
 
     fn resize_if_needed(
@@ -142,7 +156,7 @@ impl<'a> OptimizeImageUseCase<'a> {
         let target_w = options.max_width.unwrap_or(w);
         let target_h = options.max_height.unwrap_or(h);
 
-        info!(from = %format!("{}x{}", w, h), to = %format!("{}x{}", target_w, target_h), "Resizing image");
+        info!(from = %format!("{}x{}px", w, h), to = %format!("{}x{}px", target_w, target_h), "Resizing image");
 
         let resized = img.resize(target_w, target_h, image::imageops::FilterType::Lanczos3);
         let mut output = Vec::new();
