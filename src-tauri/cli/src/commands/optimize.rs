@@ -2,6 +2,7 @@ use clap::Args;
 use feather_core::modules::asset::domain::optimization_options::OptimizationOptions;
 use feather_core::modules::asset::infrastructure::default_image_validator::DefaultImageValidator;
 use feather_core::modules::asset::infrastructure::file_asset_detector::FileAssetDetector;
+use feather_core::modules::asset::infrastructure::file_backup_service::FileBackupService;
 use feather_core::modules::asset::infrastructure::jpeg_compressor::JpegCompressor;
 use feather_core::modules::asset::infrastructure::oxipng_compressor::OxipngCompressor;
 use feather_core::modules::asset::use_cases::optimize_image::OptimizeImageUseCase;
@@ -24,6 +25,9 @@ pub struct OptimizeArgs {
 
     #[arg(long)]
     pub max_depth: Option<usize>,
+
+    #[arg(long)]
+    pub no_backup: bool,
 }
 
 pub fn execute(args: &OptimizeArgs) {
@@ -37,13 +41,14 @@ pub fn execute(args: &OptimizeArgs) {
     let png_comp = OxipngCompressor::new();
     let jpeg_comp = JpegCompressor::new(80);
     let validator = DefaultImageValidator::new();
-    let use_case = OptimizeImageUseCase::new(&detector, &png_comp, &jpeg_comp, &validator);
+    let backup = FileBackupService::new();
+    let use_case = OptimizeImageUseCase::new(&detector, &png_comp, &jpeg_comp, &validator, &backup);
 
     process_path(path, args, &use_case);
 }
 
 fn process_path(path: &Path, args: &OptimizeArgs, use_case: &OptimizeImageUseCase) {
-    let options = OptimizationOptions::new(args.max_width, args.max_height);
+    let options = OptimizationOptions::new(args.max_width, args.max_height, !args.no_backup);
 
     if path.is_file() {
         optimize_file(path, args.dry_run, use_case, &options);
