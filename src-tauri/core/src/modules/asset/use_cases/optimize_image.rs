@@ -1,5 +1,6 @@
 use crate::modules::asset::domain::asset_detector::AssetDetector;
 use crate::modules::asset::domain::asset_type::AssetType;
+use crate::modules::asset::domain::backup_service::BackupService;
 use crate::modules::asset::domain::image_compressor::ImageCompressor;
 use crate::modules::asset::domain::image_validator::ImageValidator;
 use crate::modules::asset::domain::optimization_error::OptimizationError;
@@ -16,6 +17,7 @@ pub struct OptimizeImageUseCase<'a> {
     png_compressor: &'a dyn ImageCompressor,
     jpeg_compressor: &'a dyn ImageCompressor,
     validator: &'a dyn ImageValidator,
+    backup_service: &'a dyn BackupService,
 }
 
 impl<'a> OptimizeImageUseCase<'a> {
@@ -24,12 +26,14 @@ impl<'a> OptimizeImageUseCase<'a> {
         png_compressor: &'a dyn ImageCompressor,
         jpeg_compressor: &'a dyn ImageCompressor,
         validator: &'a dyn ImageValidator,
+        backup_service: &'a dyn BackupService,
     ) -> Self {
         Self {
             detector,
             png_compressor,
             jpeg_compressor,
             validator,
+            backup_service,
         }
     }
 
@@ -52,6 +56,11 @@ impl<'a> OptimizeImageUseCase<'a> {
         }
 
         self.validator.validate(&optimized_data)?;
+
+        if options.create_backup {
+            self.backup_service.backup(path)?;
+        }
+
         self.persist_result(path, original_size, optimized_data)
     }
 
@@ -100,11 +109,25 @@ impl<'a> OptimizeImageUseCase<'a> {
     fn log_success(&self, path: &Path, result: &OptimizationResult) {
         info!(
             path = ?path,
-            original = result.original_size,
-            optimized = result.optimized_size,
+            original = %self.format_size(result.original_size),
+            optimized = %self.format_size(result.optimized_size),
             ratio = %format!("{:.2}%", result.compression_ratio()),
             "Image optimized successfully"
         );
+    }
+
+    fn format_size(&self, bytes: u64) -> String {
+        const KB: f64 = 1024.0;
+        const MB: f64 = KB * 1024.0;
+
+        let bytes_f = bytes as f64;
+        if bytes_f >= MB {
+            format!("{:.2} MB", bytes_f / MB)
+        } else if bytes_f >= KB {
+            format!("{:.2} KB", bytes_f / KB)
+        } else {
+            format!("{} B", bytes)
+        }
     }
 
     fn resize_if_needed(
@@ -142,7 +165,7 @@ impl<'a> OptimizeImageUseCase<'a> {
         let target_w = options.max_width.unwrap_or(w);
         let target_h = options.max_height.unwrap_or(h);
 
-        info!(from = %format!("{}x{}", w, h), to = %format!("{}x{}", target_w, target_h), "Resizing image");
+        info!(from = %format!("{}x{}px", w, h), to = %format!("{}x{}px", target_w, target_h), "Resizing image");
 
         let resized = img.resize(target_w, target_h, image::imageops::FilterType::Lanczos3);
         let mut output = Vec::new();
@@ -169,9 +192,10 @@ mod tests {
     use super::*;
     use crate::modules::asset::infrastructure::default_image_validator::DefaultImageValidator;
     use crate::modules::asset::infrastructure::file_asset_detector::FileAssetDetector;
+    use crate::modules::asset::infrastructure::file_backup_service::FileBackupService;
     use crate::modules::asset::infrastructure::jpeg_compressor::JpegCompressor;
     use crate::modules::asset::infrastructure::oxipng_compressor::OxipngCompressor;
-    use image::{ImageFormat, Rgb, RgbImage};
+    use image::{Rgb, RgbImage};
     use tempfile::tempdir;
 
     #[test]
@@ -190,7 +214,9 @@ mod tests {
         let png_comp = OxipngCompressor::new();
         let jpeg_comp = JpegCompressor::new(80);
         let validator = DefaultImageValidator::new();
-        let use_case = OptimizeImageUseCase::new(&detector, &png_comp, &jpeg_comp, &validator);
+        let backup = FileBackupService::new();
+        let use_case =
+            OptimizeImageUseCase::new(&detector, &png_comp, &jpeg_comp, &validator, &backup);
 
         let options = OptimizationOptions::default();
         let result = use_case.execute(&path, &options);
@@ -218,7 +244,9 @@ mod tests {
         let png_comp = OxipngCompressor::new();
         let jpeg_comp = JpegCompressor::new(10);
         let validator = DefaultImageValidator::new();
-        let use_case = OptimizeImageUseCase::new(&detector, &png_comp, &jpeg_comp, &validator);
+        let backup = FileBackupService::new();
+        let use_case =
+            OptimizeImageUseCase::new(&detector, &png_comp, &jpeg_comp, &validator, &backup);
 
         let options = OptimizationOptions::default();
         let result = use_case
@@ -243,9 +271,11 @@ mod tests {
         let png_comp = OxipngCompressor::new();
         let jpeg_comp = JpegCompressor::new(80);
         let validator = DefaultImageValidator::new();
-        let use_case = OptimizeImageUseCase::new(&detector, &png_comp, &jpeg_comp, &validator);
+        let backup = FileBackupService::new();
+        let use_case =
+            OptimizeImageUseCase::new(&detector, &png_comp, &jpeg_comp, &validator, &backup);
 
-        let options = OptimizationOptions::new(Some(100), Some(100));
+        let options = OptimizationOptions::new(Some(100), Some(100), false);
         let result = use_case
             .execute(&path, &options)
             .expect("Should resize and optimize");
@@ -267,9 +297,11 @@ mod tests {
         let png_comp = OxipngCompressor::new();
         let jpeg_comp = JpegCompressor::new(80);
         let validator = DefaultImageValidator::new();
-        let use_case = OptimizeImageUseCase::new(&detector, &png_comp, &jpeg_comp, &validator);
+        let backup = FileBackupService::new();
+        let use_case =
+            OptimizeImageUseCase::new(&detector, &png_comp, &jpeg_comp, &validator, &backup);
 
-        let options = OptimizationOptions::new(Some(100), Some(100));
+        let options = OptimizationOptions::new(Some(100), Some(100), false);
         let _ = use_case.execute(&path, &options);
 
         let final_img = image::open(&path).unwrap();

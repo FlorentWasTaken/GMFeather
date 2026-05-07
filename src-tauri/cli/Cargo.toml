@@ -1,5 +1,5 @@
 [package]
-name = "cli"
+name = "gmfeather"
 version = "0.1.0"
 edition = "2021"
 
@@ -11,3 +11,4 @@ serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 dotenvy.workspace = true
+walkdir.workspace = true
