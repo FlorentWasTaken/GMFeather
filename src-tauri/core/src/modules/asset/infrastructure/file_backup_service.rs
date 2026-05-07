@@ -10,10 +10,7 @@ pub struct FileBackupService {
 
 impl FileBackupService {
     pub fn new() -> Self {
-        let proj_dirs = ProjectDirs::from("com", "florentwastaken", "gmfeather")
-            .expect("Could not determine AppData directory");
-        let backup_root = proj_dirs.data_local_dir().join("backups");
-        Self { backup_root }
+        Self::default()
     }
 
     #[cfg(test)]
@@ -36,6 +33,15 @@ impl FileBackupService {
             }
         }
         backup_path
+    }
+}
+
+impl Default for FileBackupService {
+    fn default() -> Self {
+        let proj_dirs = ProjectDirs::from("com", "florentwastaken", "gmfeather")
+            .expect("Could not determine AppData directory");
+        let backup_root = proj_dirs.data_local_dir().join("backups");
+        Self { backup_root }
     }
 }
 
