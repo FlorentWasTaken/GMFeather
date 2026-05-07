@@ -46,8 +46,7 @@ fn process_path(path: &Path, args: &RollbackArgs, use_case: &RollbackAssetUseCas
 }
 
 fn rollback_file(path: &Path, use_case: &RollbackAssetUseCase) {
-    match use_case.execute(path) {
-        Ok(_) => info!("Restored {:?}", path),
-        Err(_) => (),
+    if use_case.execute(path).is_ok() {
+        info!("Restored {:?}", path);
     }
 }
