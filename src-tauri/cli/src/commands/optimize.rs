@@ -1,3 +1,4 @@
+use crate::ui::progress::{create_progress_bar, display_summary, BatchStats};
 use clap::Args;
 use feather_core::modules::asset::domain::optimization_options::OptimizationOptions;
 use feather_core::modules::asset::infrastructure::default_image_validator::DefaultImageValidator;
@@ -6,8 +7,9 @@ use feather_core::modules::asset::infrastructure::file_backup_service::FileBacku
 use feather_core::modules::asset::infrastructure::jpeg_compressor::JpegCompressor;
 use feather_core::modules::asset::infrastructure::oxipng_compressor::OxipngCompressor;
 use feather_core::modules::asset::use_cases::optimize_image::OptimizeImageUseCase;
+use indicatif::ProgressBar;
 use std::path::Path;
-use tracing::{error, info, warn};
+use tracing::error;
 use walkdir::WalkDir;
 
 #[derive(Args)]
@@ -51,26 +53,72 @@ pub fn execute(args: &OptimizeArgs) {
     let backup = FileBackupService::new();
     let use_case = OptimizeImageUseCase::new(&detector, &png_comp, &jpeg_comp, &validator, &backup);
 
-    process_path(path, args, &use_case);
+    let mut stats = BatchStats::default();
+    process_with_feedback(path, args, &use_case, &mut stats);
+    display_summary(&stats);
 }
 
-fn process_path(path: &Path, args: &OptimizeArgs, use_case: &OptimizeImageUseCase) {
+fn process_with_feedback(
+    path: &Path,
+    args: &OptimizeArgs,
+    use_case: &OptimizeImageUseCase,
+    stats: &mut BatchStats,
+) {
+    let total = if path.is_file() {
+        1
+    } else {
+        count_files(path, args.max_depth)
+    };
+    let pb = create_progress_bar(total);
+    process_path(path, args, use_case, stats, &pb);
+    pb.finish_and_clear();
+}
+
+fn process_path(
+    path: &Path,
+    args: &OptimizeArgs,
+    use_case: &OptimizeImageUseCase,
+    stats: &mut BatchStats,
+    pb: &ProgressBar,
+) {
     let options = OptimizationOptions::new(args.max_width, args.max_height, !args.no_backup);
-
     if path.is_file() {
-        optimize_file(path, args.dry_run, use_case, &options);
-        return;
+        process_single_file(path, args.dry_run, use_case, &options, stats, pb);
+    } else {
+        process_directory(path, args, use_case, &options, stats, pb);
     }
+}
 
+fn process_single_file(
+    path: &Path,
+    dry_run: bool,
+    use_case: &OptimizeImageUseCase,
+    options: &OptimizationOptions,
+    stats: &mut BatchStats,
+    pb: &ProgressBar,
+) {
+    optimize_file(path, dry_run, use_case, options, stats);
+    pb.inc(1);
+}
+
+fn process_directory(
+    path: &Path,
+    args: &OptimizeArgs,
+    use_case: &OptimizeImageUseCase,
+    options: &OptimizationOptions,
+    stats: &mut BatchStats,
+    pb: &ProgressBar,
+) {
     let mut walker = WalkDir::new(path);
     if let Some(depth) = args.max_depth {
         walker = walker.max_depth(depth);
     }
-
-    for entry in walker.into_iter().filter_map(|e| e.ok()) {
-        if entry.file_type().is_file() {
-            optimize_file(entry.path(), args.dry_run, use_case, &options);
-        }
+    for entry in walker
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+    {
+        process_single_file(entry.path(), args.dry_run, use_case, options, stats, pb);
     }
 }
 
@@ -79,14 +127,36 @@ fn optimize_file(
     dry_run: bool,
     use_case: &OptimizeImageUseCase,
     options: &OptimizationOptions,
+    stats: &mut BatchStats,
 ) {
     if dry_run {
-        info!("Dry run: would optimize {:?} with {:?}", path, options);
+        stats.files_processed += 1;
         return;
     }
 
     match use_case.execute(path, options) {
-        Ok(_) => info!("Optimized {:?}", path),
-        Err(e) => warn!("Skipped/Failed {:?}: {:?}", path, e),
+        Ok(res) => {
+            stats.files_processed += 1;
+            stats.space_saved += res.original_size.saturating_sub(res.optimized_size);
+        }
+        Err(feather_core::modules::asset::domain::optimization_error::OptimizationError::OptimizationIneffective) => {
+            stats.files_processed += 1;
+        }
+        Err(feather_core::modules::asset::domain::optimization_error::OptimizationError::UnsupportedType(_)) => {
+            stats.files_skipped += 1;
+        }
+        Err(_) => stats.errors += 1,
     }
+}
+
+fn count_files(path: &Path, max_depth: Option<usize>) -> u64 {
+    let mut walker = WalkDir::new(path);
+    if let Some(depth) = max_depth {
+        walker = walker.max_depth(depth);
+    }
+    walker
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+        .count() as u64
 }

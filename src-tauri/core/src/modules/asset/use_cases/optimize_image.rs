@@ -1,3 +1,4 @@
+use crate::common::formatter::format_size;
 use crate::modules::asset::domain::asset_detector::AssetDetector;
 use crate::modules::asset::domain::asset_type::AssetType;
 use crate::modules::asset::domain::backup_service::BackupService;
@@ -109,25 +110,11 @@ impl<'a> OptimizeImageUseCase<'a> {
     fn log_success(&self, path: &Path, result: &OptimizationResult) {
         info!(
             path = ?path,
-            original = %self.format_size(result.original_size),
-            optimized = %self.format_size(result.optimized_size),
+            original = %format_size(result.original_size),
+            optimized = %format_size(result.optimized_size),
             ratio = %format!("{:.2}%", result.compression_ratio()),
             "Image optimized successfully"
         );
-    }
-
-    fn format_size(&self, bytes: u64) -> String {
-        const KB: f64 = 1024.0;
-        const MB: f64 = KB * 1024.0;
-
-        let bytes_f = bytes as f64;
-        if bytes_f >= MB {
-            format!("{:.2} MB", bytes_f / MB)
-        } else if bytes_f >= KB {
-            format!("{:.2} KB", bytes_f / KB)
-        } else {
-            format!("{} B", bytes)
-        }
     }
 
     fn resize_if_needed(

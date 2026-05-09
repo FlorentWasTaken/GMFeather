@@ -4,6 +4,7 @@ use tracing::Level;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 mod commands;
+mod ui;
 
 use commands::{handle_command, Commands};
 
