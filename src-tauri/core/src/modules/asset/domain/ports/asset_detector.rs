@@ -1,4 +1,4 @@
-use crate::modules::asset::domain::asset_type::AssetType;
+use crate::modules::asset::domain::models::asset_type::AssetType;
 use std::io;
 use std::path::Path;
 

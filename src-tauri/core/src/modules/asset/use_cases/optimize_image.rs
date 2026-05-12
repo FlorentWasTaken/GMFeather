@@ -1,12 +1,12 @@
 use crate::common::formatter::format_size;
-use crate::modules::asset::domain::asset_detector::AssetDetector;
-use crate::modules::asset::domain::asset_type::AssetType;
-use crate::modules::asset::domain::backup_service::BackupService;
-use crate::modules::asset::domain::image_compressor::ImageCompressor;
-use crate::modules::asset::domain::image_validator::ImageValidator;
-use crate::modules::asset::domain::optimization_error::OptimizationError;
-use crate::modules::asset::domain::optimization_options::OptimizationOptions;
-use crate::modules::asset::domain::optimization_result::OptimizationResult;
+use crate::modules::asset::domain::errors::optimization_error::OptimizationError;
+use crate::modules::asset::domain::models::asset_type::AssetType;
+use crate::modules::asset::domain::models::optimization_options::OptimizationOptions;
+use crate::modules::asset::domain::models::optimization_result::OptimizationResult;
+use crate::modules::asset::domain::ports::asset_detector::AssetDetector;
+use crate::modules::asset::domain::ports::backup_service::BackupService;
+use crate::modules::asset::domain::ports::image_compressor::ImageCompressor;
+use crate::modules::asset::domain::ports::image_validator::ImageValidator;
 use image::{load_from_memory, GenericImageView, ImageFormat};
 use std::fs;
 use std::io::Cursor;
@@ -43,26 +43,41 @@ impl<'a> OptimizeImageUseCase<'a> {
         path: &Path,
         options: &OptimizationOptions,
     ) -> Result<OptimizationResult, OptimizationError> {
-        let asset_type = self.detect_type(path)?;
-        let compressor = self.select_compressor(asset_type)?;
-
+        let (asset_type, compressor) = self.prepare_context(path)?;
         let original_data = fs::read(path)?;
         let original_size = original_data.len() as u64;
 
         let optimized_data = self.optimize_data(&original_data, options, asset_type, compressor)?;
-
-        if optimized_data.len() as u64 >= original_size {
-            info!(path = ?path, "Optimization skipped: no size reduction");
-            return Err(OptimizationError::OptimizationIneffective);
-        }
+        self.ensure_improvement(path, original_size, optimized_data.len() as u64)?;
 
         self.validator.validate(&optimized_data)?;
-
         if options.create_backup {
             self.backup_service.backup(path)?;
         }
 
         self.persist_result(path, original_size, optimized_data)
+    }
+
+    fn prepare_context(
+        &self,
+        path: &Path,
+    ) -> Result<(AssetType, &dyn ImageCompressor), OptimizationError> {
+        let asset_type = self.detect_type(path)?;
+        let compressor = self.select_compressor(asset_type)?;
+        Ok((asset_type, compressor))
+    }
+
+    fn ensure_improvement(
+        &self,
+        path: &Path,
+        original: u64,
+        optimized: u64,
+    ) -> Result<(), OptimizationError> {
+        if optimized >= original {
+            info!(path = ?path, "Optimization skipped: no size reduction");
+            return Err(OptimizationError::OptimizationIneffective);
+        }
+        Ok(())
     }
 
     fn detect_type(&self, path: &Path) -> Result<AssetType, OptimizationError> {
@@ -148,20 +163,39 @@ impl<'a> OptimizeImageUseCase<'a> {
         options: &OptimizationOptions,
         asset_type: AssetType,
     ) -> Result<Vec<u8>, OptimizationError> {
+        let (target_w, target_h) = self.calculate_target_dimensions(img, options);
+
+        info!(
+            from = %format!("{}x{}px", img.width(), img.height()),
+            to = %format!("{}x{}px", target_w, target_h),
+            "Resizing image"
+        );
+
+        let resized = img.resize(target_w, target_h, image::imageops::FilterType::Lanczos3);
+        let format = self.get_format(asset_type)?;
+
+        self.encode_to_vec(&resized, format)
+    }
+
+    fn calculate_target_dimensions(
+        &self,
+        img: &image::DynamicImage,
+        options: &OptimizationOptions,
+    ) -> (u32, u32) {
         let (w, h) = img.dimensions();
         let target_w = options.max_width.unwrap_or(w);
         let target_h = options.max_height.unwrap_or(h);
+        (target_w, target_h)
+    }
 
-        info!(from = %format!("{}x{}px", w, h), to = %format!("{}x{}px", target_w, target_h), "Resizing image");
-
-        let resized = img.resize(target_w, target_h, image::imageops::FilterType::Lanczos3);
+    fn encode_to_vec(
+        &self,
+        img: &image::DynamicImage,
+        format: ImageFormat,
+    ) -> Result<Vec<u8>, OptimizationError> {
         let mut output = Vec::new();
-        let format = self.get_format(asset_type)?;
-
-        resized
-            .write_to(&mut Cursor::new(&mut output), format)
+        img.write_to(&mut Cursor::new(&mut output), format)
             .map_err(|e| OptimizationError::CompressionError(format!("Write failed: {}", e)))?;
-
         Ok(output)
     }
 

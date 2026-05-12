@@ -1,6 +1,6 @@
 use crate::ui::progress::{create_progress_bar, display_summary, BatchStats};
 use clap::Args;
-use feather_core::modules::asset::domain::optimization_options::OptimizationOptions;
+use feather_core::modules::asset::domain::models::optimization_options::OptimizationOptions;
 use feather_core::modules::asset::infrastructure::default_image_validator::DefaultImageValidator;
 use feather_core::modules::asset::infrastructure::file_asset_detector::FileAssetDetector;
 use feather_core::modules::asset::infrastructure::file_backup_service::FileBackupService;
@@ -139,10 +139,10 @@ fn optimize_file(
             stats.files_processed += 1;
             stats.space_saved += res.original_size.saturating_sub(res.optimized_size);
         }
-        Err(feather_core::modules::asset::domain::optimization_error::OptimizationError::OptimizationIneffective) => {
+        Err(feather_core::modules::asset::domain::errors::optimization_error::OptimizationError::OptimizationIneffective) => {
             stats.files_processed += 1;
         }
-        Err(feather_core::modules::asset::domain::optimization_error::OptimizationError::UnsupportedType(_)) => {
+        Err(feather_core::modules::asset::domain::errors::optimization_error::OptimizationError::UnsupportedType(_)) => {
             stats.files_skipped += 1;
         }
         Err(_) => stats.errors += 1,

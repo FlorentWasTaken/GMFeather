@@ -1,5 +1,5 @@
 use clap::Parser;
-use feather_core::infrastructure::config;
+use feather_core::common::config;
 use tracing::Level;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 

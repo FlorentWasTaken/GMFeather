@@ -1,5 +1,5 @@
-use crate::modules::asset::domain::image_compressor::ImageCompressor;
-use crate::modules::asset::domain::optimization_error::OptimizationError;
+use crate::modules::asset::domain::errors::optimization_error::OptimizationError;
+use crate::modules::asset::domain::ports::image_compressor::ImageCompressor;
 use image::codecs::jpeg::JpegEncoder;
 use image::load_from_memory;
 use std::io::Cursor;

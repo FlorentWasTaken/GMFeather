@@ -1,5 +1,5 @@
-use crate::modules::asset::domain::backup_service::BackupService;
-use crate::modules::asset::domain::optimization_error::OptimizationError;
+use crate::modules::asset::domain::errors::optimization_error::OptimizationError;
+use crate::modules::asset::domain::ports::backup_service::BackupService;
 use std::path::Path;
 
 pub struct RollbackAssetUseCase<'a> {

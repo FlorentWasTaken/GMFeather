@@ -1,5 +1,5 @@
-use crate::modules::asset::domain::image_compressor::ImageCompressor;
-use crate::modules::asset::domain::optimization_error::OptimizationError;
+use crate::modules::asset::domain::errors::optimization_error::OptimizationError;
+use crate::modules::asset::domain::ports::image_compressor::ImageCompressor;
 use oxipng::{optimize_from_memory, Options};
 use tracing::{debug, error};
 

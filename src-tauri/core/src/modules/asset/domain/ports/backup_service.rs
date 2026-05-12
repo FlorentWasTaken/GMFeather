@@ -1,4 +1,4 @@
-use crate::modules::asset::domain::optimization_error::OptimizationError;
+use crate::modules::asset::domain::errors::optimization_error::OptimizationError;
 use std::path::Path;
 
 pub trait BackupService: Send + Sync {

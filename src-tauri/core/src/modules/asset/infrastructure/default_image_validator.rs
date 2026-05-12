@@ -1,5 +1,5 @@
-use crate::modules::asset::domain::image_validator::ImageValidator;
-use crate::modules::asset::domain::optimization_error::OptimizationError;
+use crate::modules::asset::domain::errors::optimization_error::OptimizationError;
+use crate::modules::asset::domain::ports::image_validator::ImageValidator;
 use image::load_from_memory;
 
 pub struct DefaultImageValidator;

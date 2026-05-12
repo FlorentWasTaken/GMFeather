@@ -1,5 +1,5 @@
-use crate::modules::asset::domain::asset_detector::{AssetDetector, AssetError};
-use crate::modules::asset::domain::asset_type::AssetType;
+use crate::modules::asset::domain::models::asset_type::AssetType;
+use crate::modules::asset::domain::ports::asset_detector::{AssetDetector, AssetError};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;

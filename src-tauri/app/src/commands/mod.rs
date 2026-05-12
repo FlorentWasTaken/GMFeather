@@ -1,6 +1,6 @@
-use feather_core::use_cases;
+use feather_core::common::greet;
 
 #[tauri::command]
 pub fn greet(name: &str) -> String {
-    use_cases::greet_user(name)
+    greet::greet_user(name)
 }
