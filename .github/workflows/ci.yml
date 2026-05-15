@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+env:
+  RUST_LOG: info
+  APP_ENV: test
+
 jobs:
   lint-rust:
     name: Lint Rust

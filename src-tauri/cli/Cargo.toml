@@ -1,10 +1,16 @@
 [package]
-name = "cli"
+name = "gmfeather"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 feather_core = { path = "../core" }
 clap = { version = "4", features = ["derive"] }
+indicatif = "0.17"
+comfy-table = "7"
 serde.workspace = true
 serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+dotenvy.workspace = true
+walkdir.workspace = true

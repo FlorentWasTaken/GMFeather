@@ -1,0 +1,332 @@
+use crate::common::formatter::format_size;
+use crate::modules::asset::domain::errors::optimization_error::OptimizationError;
+use crate::modules::asset::domain::models::asset_type::AssetType;
+use crate::modules::asset::domain::models::optimization_options::OptimizationOptions;
+use crate::modules::asset::domain::models::optimization_result::OptimizationResult;
+use crate::modules::asset::domain::ports::asset_detector::AssetDetector;
+use crate::modules::asset::domain::ports::backup_service::BackupService;
+use crate::modules::asset::domain::ports::image_compressor::ImageCompressor;
+use crate::modules::asset::domain::ports::image_validator::ImageValidator;
+use image::{load_from_memory, GenericImageView, ImageFormat};
+use std::fs;
+use std::io::Cursor;
+use std::path::Path;
+use tracing::info;
+
+pub struct OptimizeImageUseCase<'a> {
+    detector: &'a dyn AssetDetector,
+    png_compressor: &'a dyn ImageCompressor,
+    jpeg_compressor: &'a dyn ImageCompressor,
+    validator: &'a dyn ImageValidator,
+    backup_service: &'a dyn BackupService,
+}
+
+impl<'a> OptimizeImageUseCase<'a> {
+    pub fn new(
+        detector: &'a dyn AssetDetector,
+        png_compressor: &'a dyn ImageCompressor,
+        jpeg_compressor: &'a dyn ImageCompressor,
+        validator: &'a dyn ImageValidator,
+        backup_service: &'a dyn BackupService,
+    ) -> Self {
+        Self {
+            detector,
+            png_compressor,
+            jpeg_compressor,
+            validator,
+            backup_service,
+        }
+    }
+
+    pub fn execute(
+        &self,
+        path: &Path,
+        options: &OptimizationOptions,
+    ) -> Result<OptimizationResult, OptimizationError> {
+        let (asset_type, compressor) = self.prepare_context(path)?;
+        let original_data = fs::read(path)?;
+        let original_size = original_data.len() as u64;
+
+        let optimized_data = self.optimize_data(&original_data, options, asset_type, compressor)?;
+        self.ensure_improvement(path, original_size, optimized_data.len() as u64)?;
+
+        self.validator.validate(&optimized_data)?;
+        if options.create_backup {
+            self.backup_service.backup(path)?;
+        }
+
+        self.persist_result(path, original_size, optimized_data)
+    }
+
+    fn prepare_context(
+        &self,
+        path: &Path,
+    ) -> Result<(AssetType, &dyn ImageCompressor), OptimizationError> {
+        let asset_type = self.detect_type(path)?;
+        let compressor = self.select_compressor(asset_type)?;
+        Ok((asset_type, compressor))
+    }
+
+    fn ensure_improvement(
+        &self,
+        path: &Path,
+        original: u64,
+        optimized: u64,
+    ) -> Result<(), OptimizationError> {
+        if optimized >= original {
+            info!(path = ?path, "Optimization skipped: no size reduction");
+            return Err(OptimizationError::OptimizationIneffective);
+        }
+        Ok(())
+    }
+
+    fn detect_type(&self, path: &Path) -> Result<AssetType, OptimizationError> {
+        self.detector
+            .detect(path)
+            .map_err(|e| OptimizationError::UnsupportedType(format!("{:?}", e)))
+    }
+
+    fn select_compressor(
+        &self,
+        asset_type: AssetType,
+    ) -> Result<&dyn ImageCompressor, OptimizationError> {
+        match asset_type {
+            AssetType::PNG => Ok(self.png_compressor),
+            AssetType::JPG => Ok(self.jpeg_compressor),
+            _ => Err(OptimizationError::UnsupportedType(asset_type.to_string())),
+        }
+    }
+
+    fn optimize_data(
+        &self,
+        data: &[u8],
+        options: &OptimizationOptions,
+        asset_type: AssetType,
+        compressor: &dyn ImageCompressor,
+    ) -> Result<Vec<u8>, OptimizationError> {
+        let resized = self.resize_if_needed(data, options, asset_type)?;
+        compressor.compress(&resized)
+    }
+
+    fn persist_result(
+        &self,
+        path: &Path,
+        original_size: u64,
+        data: Vec<u8>,
+    ) -> Result<OptimizationResult, OptimizationError> {
+        let optimized_size = data.len() as u64;
+        fs::write(path, &data)?;
+
+        let result = OptimizationResult::new(path.to_path_buf(), original_size, optimized_size);
+        self.log_success(path, &result);
+        Ok(result)
+    }
+
+    fn log_success(&self, path: &Path, result: &OptimizationResult) {
+        info!(
+            path = ?path,
+            original = %format_size(result.original_size),
+            optimized = %format_size(result.optimized_size),
+            ratio = %format!("{:.2}%", result.compression_ratio()),
+            "Image optimized successfully"
+        );
+    }
+
+    fn resize_if_needed(
+        &self,
+        data: &[u8],
+        options: &OptimizationOptions,
+        asset_type: AssetType,
+    ) -> Result<Vec<u8>, OptimizationError> {
+        if options.max_width.is_none() && options.max_height.is_none() {
+            return Ok(data.to_vec());
+        }
+
+        let img = load_from_memory(data)
+            .map_err(|e| OptimizationError::CompressionError(format!("Failed to load: {}", e)))?;
+
+        if !self.should_resize(&img, options) {
+            return Ok(data.to_vec());
+        }
+
+        self.perform_resize(&img, options, asset_type)
+    }
+
+    fn should_resize(&self, img: &image::DynamicImage, options: &OptimizationOptions) -> bool {
+        let (w, h) = img.dimensions();
+        w > options.max_width.unwrap_or(w) || h > options.max_height.unwrap_or(h)
+    }
+
+    fn perform_resize(
+        &self,
+        img: &image::DynamicImage,
+        options: &OptimizationOptions,
+        asset_type: AssetType,
+    ) -> Result<Vec<u8>, OptimizationError> {
+        let (target_w, target_h) = self.calculate_target_dimensions(img, options);
+
+        info!(
+            from = %format!("{}x{}px", img.width(), img.height()),
+            to = %format!("{}x{}px", target_w, target_h),
+            "Resizing image"
+        );
+
+        let resized = img.resize(target_w, target_h, image::imageops::FilterType::Lanczos3);
+        let format = self.get_format(asset_type)?;
+
+        self.encode_to_vec(&resized, format)
+    }
+
+    fn calculate_target_dimensions(
+        &self,
+        img: &image::DynamicImage,
+        options: &OptimizationOptions,
+    ) -> (u32, u32) {
+        let (w, h) = img.dimensions();
+        let target_w = options.max_width.unwrap_or(w);
+        let target_h = options.max_height.unwrap_or(h);
+        (target_w, target_h)
+    }
+
+    fn encode_to_vec(
+        &self,
+        img: &image::DynamicImage,
+        format: ImageFormat,
+    ) -> Result<Vec<u8>, OptimizationError> {
+        let mut output = Vec::new();
+        img.write_to(&mut Cursor::new(&mut output), format)
+            .map_err(|e| OptimizationError::CompressionError(format!("Write failed: {}", e)))?;
+        Ok(output)
+    }
+
+    fn get_format(&self, asset_type: AssetType) -> Result<ImageFormat, OptimizationError> {
+        match asset_type {
+            AssetType::PNG => Ok(ImageFormat::Png),
+            AssetType::JPG => Ok(ImageFormat::Jpeg),
+            _ => Err(OptimizationError::UnsupportedType(asset_type.to_string())),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::modules::asset::infrastructure::default_image_validator::DefaultImageValidator;
+    use crate::modules::asset::infrastructure::file_asset_detector::FileAssetDetector;
+    use crate::modules::asset::infrastructure::file_backup_service::FileBackupService;
+    use crate::modules::asset::infrastructure::jpeg_compressor::JpegCompressor;
+    use crate::modules::asset::infrastructure::oxipng_compressor::OxipngCompressor;
+    use image::{Rgb, RgbImage};
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_optimize_png_success() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.png");
+        let mut img = RgbImage::new(100, 100);
+        for x in 0..100 {
+            for y in 0..100 {
+                img.put_pixel(x, y, Rgb([x as u8, y as u8, (x + y) as u8]));
+            }
+        }
+        img.save(&path).unwrap();
+
+        let detector = FileAssetDetector::new();
+        let png_comp = OxipngCompressor::new();
+        let jpeg_comp = JpegCompressor::new(80);
+        let validator = DefaultImageValidator::new();
+        let backup = FileBackupService::new();
+        let use_case =
+            OptimizeImageUseCase::new(&detector, &png_comp, &jpeg_comp, &validator, &backup);
+
+        let options = OptimizationOptions::default();
+        let result = use_case.execute(&path, &options);
+
+        match result {
+            Ok(res) => assert!(res.optimized_size < res.original_size),
+            Err(OptimizationError::OptimizationIneffective) => (),
+            Err(e) => panic!("Optimization failed: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_optimize_jpg_success() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.jpg");
+        let mut img = RgbImage::new(100, 100);
+        for x in 0..100 {
+            for y in 0..100 {
+                img.put_pixel(x, y, Rgb([x as u8, y as u8, (x + y) as u8]));
+            }
+        }
+        img.save(&path).unwrap();
+
+        let detector = FileAssetDetector::new();
+        let png_comp = OxipngCompressor::new();
+        let jpeg_comp = JpegCompressor::new(10);
+        let validator = DefaultImageValidator::new();
+        let backup = FileBackupService::new();
+        let use_case =
+            OptimizeImageUseCase::new(&detector, &png_comp, &jpeg_comp, &validator, &backup);
+
+        let options = OptimizationOptions::default();
+        let result = use_case
+            .execute(&path, &options)
+            .expect("Should optimize JPG");
+        assert!(result.optimized_size < result.original_size);
+    }
+
+    #[test]
+    fn test_optimize_png_with_resize() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test_resize.png");
+        let mut img = RgbImage::new(200, 200);
+        for x in 0..200 {
+            for y in 0..200 {
+                img.put_pixel(x, y, Rgb([x as u8, y as u8, (x + y) as u8]));
+            }
+        }
+        img.save(&path).unwrap();
+
+        let detector = FileAssetDetector::new();
+        let png_comp = OxipngCompressor::new();
+        let jpeg_comp = JpegCompressor::new(80);
+        let validator = DefaultImageValidator::new();
+        let backup = FileBackupService::new();
+        let use_case =
+            OptimizeImageUseCase::new(&detector, &png_comp, &jpeg_comp, &validator, &backup);
+
+        let options = OptimizationOptions::new(Some(100), Some(100), false);
+        let result = use_case
+            .execute(&path, &options)
+            .expect("Should resize and optimize");
+
+        assert!(result.optimized_size < result.original_size);
+        let final_img = image::open(&path).unwrap();
+        assert_eq!(final_img.width(), 100);
+        assert_eq!(final_img.height(), 100);
+    }
+
+    #[test]
+    fn test_optimize_png_no_resize_needed() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test_no_resize.png");
+        let img = RgbImage::new(50, 50);
+        img.save(&path).unwrap();
+
+        let detector = FileAssetDetector::new();
+        let png_comp = OxipngCompressor::new();
+        let jpeg_comp = JpegCompressor::new(80);
+        let validator = DefaultImageValidator::new();
+        let backup = FileBackupService::new();
+        let use_case =
+            OptimizeImageUseCase::new(&detector, &png_comp, &jpeg_comp, &validator, &backup);
+
+        let options = OptimizationOptions::new(Some(100), Some(100), false);
+        let _ = use_case.execute(&path, &options);
+
+        let final_img = image::open(&path).unwrap();
+        assert_eq!(final_img.width(), 50);
+        assert_eq!(final_img.height(), 50);
+    }
+}
