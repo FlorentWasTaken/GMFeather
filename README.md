@@ -11,33 +11,34 @@
 
 ## ✨ Key Features
 
--   **Multi-Interface Support**: Access the optimizer via a modern, intuitive GUI or a powerful CLI for automation.
--   **Smart Compression**: Optimized handling of `VTF` (textures), `WAV/MP3` (audio), and other common GMod asset formats.
--   **Safe Processing**: Built-in validation to ensure that compressed assets remain fully functional in-game.
--   **Clean Architecture**: Engineered using Hexagonal Architecture principles with strict SRP enforcement (max 20 lines per function).
--   **Quality Control**: Automated pre-commit hooks (Husky, lint-staged) and CI/CD pipelines to ensure code integrity.
+-   **Multi-Interface Support**: Ready for both CLI automation and a modern GUI (GUI in development).
+-   **Image Compression**: High-performance optimization for `PNG` (via Oxipng) and `JPG` (via Jpeg-turbo).
+-   **Smart Resizing**: Automatically downscale images to maximum dimensions while maintaining aspect ratio.
+-   **Safe Processing**: Built-in backup system in local AppData and validation to ensure asset integrity.
+-   **Clean Architecture**: Engineered using Hexagonal Architecture principles with strict SRP enforcement.
+-   **Quality Control**: Automated pre-commit hooks and strict typing for maximum reliability.
 
 ## 🏗️ Architecture
 
-GMFeather is built with a clear separation of concerns to ensure long-term stability:
+GMFeather is built with a clear separation of concerns:
 
--   **Core**: Contains the business logic and domain rules (Hexagonal Architecture).
--   **App**: A lightweight, secure desktop application powered by **Tauri** and **Vue 3**.
--   **CLI**: A robust command-line interface for batch processing and CI/CD integration.
+-   **Core**: The business logic and domain rules, independent of any framework.
+-   **CLI**: A robust command-line interface for batch processing.
+-   **App**: Desktop application powered by **Tauri** and **Vue 3** (Coming soon).
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
-Ensure you have the following installed on your system:
+Ensure you have the following installed:
 
 -   **Rust**: `1.95.0` or higher
 -   **Node.js**: `v24.11.1` or higher
--   **Package Manager**: `npm` (included with Node.js)
+-   **NPM**: Included with Node.js
 
 ### 🌍 Environment Configuration
 
-Copy the example environment file and adjust the values as needed:
+Copy the example environment file:
 
 ```bash
 cp .env.example .env
@@ -46,7 +47,6 @@ cp .env.example .env
 | Variable | Default | Description |
 | :--- | :--- | :--- |
 | `RUST_LOG` | `info` | Logging level (debug, info, warn, error) |
-| `APP_ENV` | `development` | Application environment (development, production) |
 
 ### 📦 Installation
 
@@ -56,30 +56,62 @@ cp .env.example .env
     cd GMFeather
     ```
 
-2.  Install frontend dependencies:
+2.  Install dependencies:
     ```bash
     npm install
     ```
 
-3.  Run the application in development mode:
-    ```bash
-    npm run dev
-    ```
+## 📖 CLI Usage
 
-## 📖 Usage
+The GMFeather CLI allows you to optimize assets in bulk. You can run it using cargo:
 
-> [!NOTE]
-> Detailed usage instructions and examples will be available soon as the project implementation progresses.
+```bash
+cargo run --bin gmfeather -- [COMMAND] [ARGS]
+```
+
+### 🖼️ Optimize Assets
+Optimize images (PNG/JPG) in a file or directory recursively.
+
+```bash
+# Basic optimization
+gmfeather optimize ./addons/my_addon
+
+# With resizing and dry run
+gmfeather optimize ./addons/textures --max-width 1024 --max-height 1024 --dry-run
+
+# Disable backups (not recommended)
+gmfeather optimize ./addons/textures --no-backup
+```
+
+### 🔙 Rollback
+Restore files from their last backup.
+
+```bash
+# Rollback a specific file
+gmfeather rollback ./addons/my_addon/texture.png
+
+# Rollback an entire directory
+gmfeather rollback ./addons/my_addon
+```
+
+### 🧹 Clean
+Remove stored backups to free up space.
+
+```bash
+gmfeather clean ./addons/my_addon
+```
 
 ## 🛠️ Development
 
-To build the production version of the application:
+To build the project:
 
 ```bash
-npm run build
-```
+# Build the CLI
+cargo build --release --bin gmfeather
 
-For more details on the Tauri integration, check the `src-tauri` directory.
+# Build the Tauri App
+npm run tauri build
+```
 
 ## 📄 License
 
