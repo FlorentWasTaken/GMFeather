@@ -1,16 +1,28 @@
 use crate::ui::progress::{create_progress_bar, display_summary, BatchStats};
 use clap::Args;
+use feather_core::modules::asset::domain::models::asset_type::AssetType;
 use feather_core::modules::asset::domain::models::optimization_options::OptimizationOptions;
+use feather_core::modules::asset::domain::ports::asset_detector::AssetDetector;
 use feather_core::modules::asset::infrastructure::default_image_validator::DefaultImageValidator;
 use feather_core::modules::asset::infrastructure::file_asset_detector::FileAssetDetector;
 use feather_core::modules::asset::infrastructure::file_backup_service::FileBackupService;
 use feather_core::modules::asset::infrastructure::jpeg_compressor::JpegCompressor;
+use feather_core::modules::asset::infrastructure::mp3_compressor::Mp3Compressor;
 use feather_core::modules::asset::infrastructure::oxipng_compressor::OxipngCompressor;
+use feather_core::modules::asset::infrastructure::wav_compressor::WavCompressor;
+use feather_core::modules::asset::use_cases::optimize_audio::OptimizeAudioUseCase;
 use feather_core::modules::asset::use_cases::optimize_image::OptimizeImageUseCase;
 use indicatif::ProgressBar;
 use std::path::Path;
 use tracing::error;
 use walkdir::WalkDir;
+
+struct OptimizationContext<'a> {
+    detector: &'a FileAssetDetector,
+    img_use_case: &'a OptimizeImageUseCase<'a>,
+    audio_use_case: &'a OptimizeAudioUseCase<'a>,
+    options: &'a OptimizationOptions,
+}
 
 #[derive(Args)]
 pub struct OptimizeArgs {
@@ -37,6 +49,12 @@ pub struct OptimizeArgs {
 
     #[arg(long, help = "Skip creating .bak files (not recommended)")]
     pub no_backup: bool,
+
+    #[arg(
+        long,
+        help = "Target sample rate for audio files (11025, 22050, 44100)"
+    )]
+    pub sample_rate: Option<u32>,
 }
 
 pub fn execute(args: &OptimizeArgs) {
@@ -49,19 +67,37 @@ pub fn execute(args: &OptimizeArgs) {
     let detector = FileAssetDetector::new();
     let png_comp = OxipngCompressor::new();
     let jpeg_comp = JpegCompressor::new(80);
+    let wav_comp = WavCompressor::new();
+    let mp3_comp = Mp3Compressor::new();
     let validator = DefaultImageValidator::new();
     let backup = FileBackupService::new();
-    let use_case = OptimizeImageUseCase::new(&detector, &png_comp, &jpeg_comp, &validator, &backup);
+
+    let img_use_case =
+        OptimizeImageUseCase::new(&detector, &png_comp, &jpeg_comp, &validator, &backup);
+    let audio_use_case = OptimizeAudioUseCase::new(&detector, &wav_comp, &mp3_comp, &backup);
+    let options = OptimizationOptions::new(
+        args.max_width,
+        args.max_height,
+        !args.no_backup,
+        args.sample_rate,
+    );
+
+    let ctx = OptimizationContext {
+        detector: &detector,
+        img_use_case: &img_use_case,
+        audio_use_case: &audio_use_case,
+        options: &options,
+    };
 
     let mut stats = BatchStats::default();
-    process_with_feedback(path, args, &use_case, &mut stats);
+    process_with_feedback(path, args, &ctx, &mut stats);
     display_summary(&stats);
 }
 
 fn process_with_feedback(
     path: &Path,
     args: &OptimizeArgs,
-    use_case: &OptimizeImageUseCase,
+    ctx: &OptimizationContext,
     stats: &mut BatchStats,
 ) {
     let total = if path.is_file() {
@@ -70,42 +106,39 @@ fn process_with_feedback(
         count_files(path, args.max_depth)
     };
     let pb = create_progress_bar(total);
-    process_path(path, args, use_case, stats, &pb);
+    process_path(path, args, ctx, stats, &pb);
     pb.finish_and_clear();
 }
 
 fn process_path(
     path: &Path,
     args: &OptimizeArgs,
-    use_case: &OptimizeImageUseCase,
+    ctx: &OptimizationContext,
     stats: &mut BatchStats,
     pb: &ProgressBar,
 ) {
-    let options = OptimizationOptions::new(args.max_width, args.max_height, !args.no_backup);
     if path.is_file() {
-        process_single_file(path, args.dry_run, use_case, &options, stats, pb);
+        process_single_file(path, args.dry_run, ctx, stats, pb);
     } else {
-        process_directory(path, args, use_case, &options, stats, pb);
+        process_directory(path, args, ctx, stats, pb);
     }
 }
 
 fn process_single_file(
     path: &Path,
     dry_run: bool,
-    use_case: &OptimizeImageUseCase,
-    options: &OptimizationOptions,
+    ctx: &OptimizationContext,
     stats: &mut BatchStats,
     pb: &ProgressBar,
 ) {
-    optimize_file(path, dry_run, use_case, options, stats);
+    optimize_file(path, dry_run, ctx, stats);
     pb.inc(1);
 }
 
 fn process_directory(
     path: &Path,
     args: &OptimizeArgs,
-    use_case: &OptimizeImageUseCase,
-    options: &OptimizationOptions,
+    ctx: &OptimizationContext,
     stats: &mut BatchStats,
     pb: &ProgressBar,
 ) {
@@ -118,23 +151,27 @@ fn process_directory(
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
     {
-        process_single_file(entry.path(), args.dry_run, use_case, options, stats, pb);
+        process_single_file(entry.path(), args.dry_run, ctx, stats, pb);
     }
 }
 
-fn optimize_file(
-    path: &Path,
-    dry_run: bool,
-    use_case: &OptimizeImageUseCase,
-    options: &OptimizationOptions,
-    stats: &mut BatchStats,
-) {
+fn optimize_file(path: &Path, dry_run: bool, ctx: &OptimizationContext, stats: &mut BatchStats) {
     if dry_run {
         stats.files_processed += 1;
         return;
     }
 
-    match use_case.execute(path, options) {
+    let asset_type = ctx.detector.detect(path).unwrap_or(AssetType::Unknown);
+    let result = match asset_type {
+        AssetType::PNG | AssetType::JPG => ctx.img_use_case.execute(path, ctx.options),
+        AssetType::WAV | AssetType::MP3 => ctx.audio_use_case.execute(path, ctx.options),
+        _ => {
+            stats.files_skipped += 1;
+            return;
+        }
+    };
+
+    match result {
         Ok(res) => {
             stats.files_processed += 1;
             stats.space_saved += res.original_size.saturating_sub(res.optimized_size);

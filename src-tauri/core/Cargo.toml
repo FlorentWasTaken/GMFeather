@@ -12,6 +12,8 @@ directories.workspace = true
 image.workspace = true
 oxipng.workspace = true
 thiserror.workspace = true
+symphonia.workspace = true
+shine_rs.workspace = true
 
 [dev-dependencies]
 tempfile = "3"
