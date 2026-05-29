@@ -130,16 +130,24 @@ impl WavCompressor {
 }
 
 impl AudioCompressor for WavCompressor {
-    fn compress(
+    fn decode(&self, input: &[u8]) -> Result<(Vec<f32>, u32, u16), OptimizationError> {
+        self.decode_wav(input)
+    }
+
+    fn resample(&self, samples: &[f32], from: u32, to: u32, channels: u16) -> Vec<f32> {
+        self.resample(samples, from, to, channels)
+    }
+
+    fn encode(
         &self,
-        input: &[u8],
-        target_sample_rate: u32,
+        pcm: &[f32],
+        sample_rate: u32,
+        channels: u16,
+        _bitrate: Option<u32>,
     ) -> Result<Vec<u8>, OptimizationError> {
-        self.validate_rate(target_sample_rate)?;
-        let (pcm, rate, channels) = self.decode_wav(input)?;
-        let resampled = self.resample(&pcm, rate, target_sample_rate, channels);
-        let pcm_bytes = self.to_bytes(&resampled);
-        let mut wav = self.write_header(target_sample_rate, channels, pcm_bytes.len());
+        self.validate_rate(sample_rate)?;
+        let pcm_bytes = self.to_bytes(pcm);
+        let mut wav = self.write_header(sample_rate, channels, pcm_bytes.len());
         wav.extend_from_slice(&pcm_bytes);
         Ok(wav)
     }

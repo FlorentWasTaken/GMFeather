@@ -55,6 +55,18 @@ pub struct OptimizeArgs {
         help = "Target sample rate for audio files (11025, 22050, 44100)"
     )]
     pub sample_rate: Option<u32>,
+
+    #[arg(
+        long = "target-format",
+        help = "Target format for audio conversion (mp3, wav)"
+    )]
+    pub target_format: Option<String>,
+
+    #[arg(
+        long = "bitrate",
+        help = "Target bitrate in kbps for MP3 compression (e.g., 64, 128, 192, 320)"
+    )]
+    pub bitrate: Option<u32>,
 }
 
 pub fn execute(args: &OptimizeArgs) {
@@ -75,11 +87,23 @@ pub fn execute(args: &OptimizeArgs) {
     let img_use_case =
         OptimizeImageUseCase::new(&detector, &png_comp, &jpeg_comp, &validator, &backup);
     let audio_use_case = OptimizeAudioUseCase::new(&detector, &wav_comp, &mp3_comp, &backup);
+
+    let target_audio_format =
+        args.target_format
+            .as_deref()
+            .and_then(|fmt| match fmt.to_lowercase().as_str() {
+                "mp3" => Some(AssetType::MP3),
+                "wav" => Some(AssetType::WAV),
+                _ => None,
+            });
+
     let options = OptimizationOptions::new(
         args.max_width,
         args.max_height,
         !args.no_backup,
         args.sample_rate,
+        target_audio_format,
+        args.bitrate,
     );
 
     let ctx = OptimizationContext {

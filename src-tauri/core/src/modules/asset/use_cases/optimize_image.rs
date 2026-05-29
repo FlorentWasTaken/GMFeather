@@ -296,7 +296,7 @@ mod tests {
         let use_case =
             OptimizeImageUseCase::new(&detector, &png_comp, &jpeg_comp, &validator, &backup);
 
-        let options = OptimizationOptions::new(Some(100), Some(100), false, None);
+        let options = OptimizationOptions::new(Some(100), Some(100), false, None, None, None);
         let result = use_case
             .execute(&path, &options)
             .expect("Should resize and optimize");
@@ -322,7 +322,7 @@ mod tests {
         let use_case =
             OptimizeImageUseCase::new(&detector, &png_comp, &jpeg_comp, &validator, &backup);
 
-        let options = OptimizationOptions::new(Some(100), Some(100), false, None);
+        let options = OptimizationOptions::new(Some(100), Some(100), false, None, None, None);
         let _ = use_case.execute(&path, &options);
 
         let final_img = image::open(&path).unwrap();

@@ -108,20 +108,21 @@ impl Mp3Compressor {
         samples: &[f32],
         rate: u32,
         channels: u16,
+        bitrate: Option<u32>,
     ) -> Result<Vec<u8>, OptimizationError> {
         let stereo_mode = match channels {
             1 => StereoMode::Mono,
             _ => StereoMode::Stereo,
         };
-        let bitrate = match channels {
+        let final_bitrate = bitrate.unwrap_or(match channels {
             1 => 64,
             _ => 128,
-        };
+        });
         let config = Mp3EncoderConfig::new()
             .sample_rate(rate)
             .channels(channels as u8)
             .stereo_mode(stereo_mode)
-            .bitrate(bitrate);
+            .bitrate(final_bitrate);
 
         let mut encoder = Mp3Encoder::new(config)
             .map_err(|e| OptimizationError::CompressionError(e.to_string()))?;
@@ -152,14 +153,22 @@ impl Mp3Compressor {
 }
 
 impl AudioCompressor for Mp3Compressor {
-    fn compress(
+    fn decode(&self, input: &[u8]) -> Result<(Vec<f32>, u32, u16), OptimizationError> {
+        self.decode_mp3(input)
+    }
+
+    fn resample(&self, samples: &[f32], from: u32, to: u32, channels: u16) -> Vec<f32> {
+        self.resample(samples, from, to, channels)
+    }
+
+    fn encode(
         &self,
-        input: &[u8],
-        target_sample_rate: u32,
+        pcm: &[f32],
+        sample_rate: u32,
+        channels: u16,
+        bitrate: Option<u32>,
     ) -> Result<Vec<u8>, OptimizationError> {
-        self.validate_rate(target_sample_rate)?;
-        let (pcm, rate, channels) = self.decode_mp3(input)?;
-        let resampled = self.resample(&pcm, rate, target_sample_rate, channels);
-        self.encode_mp3(&resampled, target_sample_rate, channels)
+        self.validate_rate(sample_rate)?;
+        self.encode_mp3(pcm, sample_rate, channels, bitrate)
     }
 }

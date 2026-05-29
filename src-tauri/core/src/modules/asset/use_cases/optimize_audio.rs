@@ -37,12 +37,20 @@ impl<'a> OptimizeAudioUseCase<'a> {
         path: &Path,
         options: &OptimizationOptions,
     ) -> Result<OptimizationResult, OptimizationError> {
-        let (_asset_type, compressor) = self.prepare_context(path)?;
+        let source_type = self.detect_type(path)?;
+        let target_type = options.target_audio_format.unwrap_or(source_type);
+
+        let source_compressor = self.select_compressor(source_type)?;
+        let target_compressor = self.select_compressor(target_type)?;
+
         let original_data = fs::read(path)?;
         let original_size = original_data.len() as u64;
 
-        let target_rate = options.target_sample_rate.unwrap_or(44100);
-        let optimized_data = compressor.compress(&original_data, target_rate)?;
+        let (pcm, rate, channels) = source_compressor.decode(&original_data)?;
+        let target_rate = options.target_sample_rate.unwrap_or(rate);
+        let resampled = source_compressor.resample(&pcm, rate, target_rate, channels);
+        let optimized_data =
+            target_compressor.encode(&resampled, target_rate, channels, options.target_bitrate)?;
 
         self.ensure_improvement(path, original_size, optimized_data.len() as u64)?;
 
@@ -50,16 +58,18 @@ impl<'a> OptimizeAudioUseCase<'a> {
             self.backup_service.backup(path)?;
         }
 
-        self.persist_result(path, original_size, optimized_data)
-    }
+        let target_path = if target_type != source_type {
+            let extension = match target_type {
+                AssetType::MP3 => "mp3",
+                AssetType::WAV => "wav",
+                _ => return Err(OptimizationError::UnsupportedType(target_type.to_string())),
+            };
+            path.with_extension(extension)
+        } else {
+            path.to_path_buf()
+        };
 
-    fn prepare_context(
-        &self,
-        path: &Path,
-    ) -> Result<(AssetType, &dyn AudioCompressor), OptimizationError> {
-        let asset_type = self.detect_type(path)?;
-        let compressor = self.select_compressor(asset_type)?;
-        Ok((asset_type, compressor))
+        self.persist_result(path, &target_path, original_size, optimized_data)
     }
 
     fn ensure_improvement(
@@ -94,15 +104,21 @@ impl<'a> OptimizeAudioUseCase<'a> {
 
     fn persist_result(
         &self,
-        path: &Path,
+        original_path: &Path,
+        target_path: &Path,
         original_size: u64,
         data: Vec<u8>,
     ) -> Result<OptimizationResult, OptimizationError> {
         let optimized_size = data.len() as u64;
-        fs::write(path, &data)?;
+        fs::write(target_path, &data)?;
 
-        let result = OptimizationResult::new(path.to_path_buf(), original_size, optimized_size);
-        self.log_success(path, &result);
+        if original_path != target_path {
+            fs::remove_file(original_path)?;
+        }
+
+        let result =
+            OptimizationResult::new(target_path.to_path_buf(), original_size, optimized_size);
+        self.log_success(target_path, &result);
         Ok(result)
     }
 
@@ -163,9 +179,38 @@ mod tests {
         let backup = FileBackupService::new();
         let use_case = OptimizeAudioUseCase::new(&detector, &wav_comp, &mp3_comp, &backup);
 
-        let options = OptimizationOptions::new(None, None, false, Some(22050));
+        let options = OptimizationOptions::new(None, None, false, Some(22050), None, None);
         let result = use_case.execute(&path, &options).unwrap();
 
         assert!(result.optimized_size < result.original_size);
+    }
+
+    #[test]
+    fn test_optimize_wav_to_mp3_conversion() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.wav");
+        let wav_data = create_test_wav();
+        std::fs::write(&path, &wav_data).unwrap();
+
+        let detector = FileAssetDetector::new();
+        let wav_comp = WavCompressor::new();
+        let mp3_comp = Mp3Compressor::new();
+        let backup = FileBackupService::new();
+        let use_case = OptimizeAudioUseCase::new(&detector, &wav_comp, &mp3_comp, &backup);
+
+        let options = OptimizationOptions::new(
+            None,
+            None,
+            false,
+            Some(22050),
+            Some(AssetType::MP3),
+            Some(64),
+        );
+        let result = use_case.execute(&path, &options).unwrap();
+
+        assert_eq!(result.path.extension().unwrap(), "mp3");
+        assert!(result.optimized_size < result.original_size);
+        assert!(!path.exists());
+        assert!(result.path.exists());
     }
 }
