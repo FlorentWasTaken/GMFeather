@@ -19,3 +19,5 @@ image = "0.25"
 oxipng = "9.1"
 thiserror = "1.0"
 walkdir = "2"
+symphonia = { version = "0.5", features = ["mp3", "wav"] }
+shine_rs = { version = "0.1", package = "shine-rs" }
