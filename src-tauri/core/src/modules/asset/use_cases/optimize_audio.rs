@@ -152,10 +152,10 @@ mod tests {
         wav.extend_from_slice(b"WAVEfmt ");
         wav.extend_from_slice(&16u32.to_le_bytes());
         wav.extend_from_slice(&1u16.to_le_bytes());
-        wav.extend_from_slice(&(channels as u16).to_le_bytes());
+        wav.extend_from_slice(&(channels).to_le_bytes());
         wav.extend_from_slice(&sample_rate.to_le_bytes());
         wav.extend_from_slice(&(sample_rate * channels as u32 * 2).to_le_bytes());
-        wav.extend_from_slice(&(channels as u16 * 2).to_le_bytes());
+        wav.extend_from_slice(&(channels * 2).to_le_bytes());
         wav.extend_from_slice(&16u16.to_le_bytes());
         wav.extend_from_slice(b"data");
         wav.extend_from_slice(&((data.len() * 2) as u32).to_le_bytes());
